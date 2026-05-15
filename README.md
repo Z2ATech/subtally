@@ -28,16 +28,16 @@ Visit `http://127.0.0.1:8787/health` to check the Worker is responding.
 D1 migrations (local)
 -------------------
 
-Create a new migration (creates a file under `migrations/`):
+Generate migration SQL from the Drizzle schema:
 
 ```bash
-wrangler d1 migrations create subtally_db initial
+bun run db:generate
 ```
 
 Apply migrations locally:
 
 ```bash
-wrangler d1 migrations apply subtally_db --local
+bun run db:migrate:local
 ```
 
 Quick verify (list tables):
@@ -45,4 +45,6 @@ Quick verify (list tables):
 ```bash
 wrangler d1 execute subtally_db --local --command "SELECT name FROM sqlite_master WHERE type='table';"
 ```
+
+The generated migration files live in `./migrations`, and Wrangler uses them for local D1 apply.
 
