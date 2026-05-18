@@ -36,7 +36,8 @@ CREATE TABLE `subscriptions` (
 	`updated_at` integer DEFAULT (unixepoch() * 1000),
 	FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`service_id`) REFERENCES `services`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "chk_subscriptions_status" CHECK("subscriptions"."status" in ('active', 'cancelled', 'expired'))
+	CONSTRAINT "chk_subscriptions_status" CHECK("subscriptions"."status" in ('active', 'cancelled', 'expired')),
+	CONSTRAINT "chk_subscriptions_price_cents" CHECK("subscriptions"."price_cents" is null or "subscriptions"."price_cents" >= 0)
 );
 --> statement-breakpoint
 CREATE INDEX `idx_subscriptions_user` ON `subscriptions` (`user_id`);--> statement-breakpoint

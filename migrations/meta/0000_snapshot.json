@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6c1fdcaf-6415-4a81-ae50-cdd03e326cc9",
+  "id": "baaeaaea-230d-4d9d-a3b2-b7674fa3e45a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "services": {
@@ -323,6 +323,10 @@
         "chk_subscriptions_status": {
           "name": "chk_subscriptions_status",
           "value": "\"subscriptions\".\"status\" in ('active', 'cancelled', 'expired')"
+        },
+        "chk_subscriptions_price_cents": {
+          "name": "chk_subscriptions_price_cents",
+          "value": "\"subscriptions\".\"price_cents\" is null or \"subscriptions\".\"price_cents\" >= 0"
         }
       }
     },

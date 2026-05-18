@@ -49,6 +49,7 @@ export const subscriptions = sqliteTable(
       .on(t.user_id, t.service_id)
       .where(sql`status = 'active'`),
     check("chk_subscriptions_status", sql`${t.status} in ('active', 'cancelled', 'expired')`),
+    check("chk_subscriptions_price_cents", sql`${t.price_cents} is null or ${t.price_cents} >= 0`),
   ]
 );
 
