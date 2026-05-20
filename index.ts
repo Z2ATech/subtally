@@ -1,6 +1,8 @@
 export interface Env {
 	DB: D1Database;
 	SESSIONS_KV: KVNamespace;
+	GOOGLE_CLIENT_ID: string;
+	GOOGLE_CLIENT_SECRET: string;
 }
 
 export default {
