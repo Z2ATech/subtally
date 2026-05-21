@@ -25,6 +25,27 @@ bun run dev
 
 Visit `http://127.0.0.1:8787/health` to check the Worker is responding.
 
+Google OAuth secrets
+--------------------
+
+For local development, Wrangler auto-loads `.env` from the project root. Create it with:
+
+```env
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
+```
+
+Do not commit `.env`.
+
+For production, store the values as Wrangler Secrets:
+
+```bash
+wrangler secret put GOOGLE_CLIENT_ID
+wrangler secret put GOOGLE_CLIENT_SECRET
+```
+
+OAuth consent screen setup and credential creation happen in Google Cloud Console. The Worker only expects these values to be available as environment secrets.
+
 D1 migrations (local)
 -------------------
 
