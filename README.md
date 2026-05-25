@@ -121,3 +121,4 @@ Every email that changes a subscription creates an event:
 - `amount_changed` — price or plan change
 
 Subscription status (`active`, `cancelled`, `unknown`) is derived from the event history, not set manually.
+# Third test for webhook prompt v3
