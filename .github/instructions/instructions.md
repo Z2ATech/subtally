@@ -31,6 +31,7 @@ This project uses:
 - **Cloudflare D1** for database storage
 - **Cloudflare KV** for session or temporary key-value storage
 - **Drizzle ORM** for D1 schema definition and migration generation
+- **Better Auth** as the authentication framework (Google OAuth provider, sessions stored in D1)
 
 ## Cloudflare Setup Rules
 
@@ -69,21 +70,27 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - Workers KV is plaintext by default and is **not** a secret store. Use it only for dynamic data (sessions, caches), and apply app-layer encryption if the values are sensitive.
 - Local development secrets go in `.env` (gitignored). A committed `.env.example` documents which keys are required. Do not use `.dev.vars` — this project standardizes on `.env`.
 
+## Authentication
+
+- Auth framework: **Better Auth** with the Drizzle D1 adapter. Do not roll custom OAuth flows.
+- Auth handler mounts at `/api/auth/*`.
+- Sessions are stored in **D1** (relational, queryable) — not KV. The `SESSIONS_KV` binding name is preserved for future use (Gmail token storage), but is not used for auth sessions.
+- Better Auth's tables (`user`, `session`, `account`, `verification`) live in `src/db/auth-schema.ts`, separate from `src/db/schema.ts` until consolidation is decided.
+- Required env vars (Wrangler Secrets in prod, `.env` locally): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`.
+
 ## Boundaries
 
 Do **not** implement future tasks early.
 
 Unless explicitly requested, do not add:
 
-- Auth flow implementation (OAuth login/callback handlers, session creation)
-- Encrypted session storage
-- Business logic
-- Routing frameworks
-- React/frontend setup
+- Additional Better Auth features beyond what the active ticket requires (MFA, magic links, email/password, account linking, etc.)
+- Encrypted KV session storage (Better Auth uses D1; encrypted KV is reserved for future Gmail token storage)
+- TanStack Start or any frontend framework setup
+- React Native / Expo mobile setup
+- Business logic (subscription tracking, Gmail ingestion, LLM extraction)
 - CI/CD
 - Production secrets / remote deployment
-
-OAuth credential setup (consent screen, client ID/secret) is distinct from the auth flow itself — credential setup may be in scope; flow implementation is not unless the active ticket explicitly says so.
 
 Only implement the current assigned task.
 

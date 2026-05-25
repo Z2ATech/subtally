@@ -46,6 +46,31 @@ wrangler secret put GOOGLE_CLIENT_SECRET
 
 OAuth consent screen setup and credential creation happen in Google Cloud Console. The Worker only expects these values to be available as environment secrets.
 
+Better Auth setup
+-----------------
+
+Better Auth handles authentication and session management. For local development, add the following to `.env`:
+
+```env
+BETTER_AUTH_SECRET=<generated-secret>
+BETTER_AUTH_URL=http://localhost:8787
+```
+
+Generate a secure secret:
+
+```bash
+openssl rand -base64 32
+```
+
+Copy the output and set it as `BETTER_AUTH_SECRET` in `.env`.
+
+For production, store as Wrangler Secrets:
+
+```bash
+wrangler secret put BETTER_AUTH_SECRET
+wrangler secret put BETTER_AUTH_URL
+```
+
 D1 migrations (local)
 -------------------
 
