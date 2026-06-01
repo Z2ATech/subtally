@@ -18,6 +18,9 @@ export function createAuth(env: { DB: D1Database; GOOGLE_CLIENT_ID: string; GOOG
 				enabled: true,
 				clientId: env.GOOGLE_CLIENT_ID,
 				clientSecret: env.GOOGLE_CLIENT_SECRET,
+				scope: ["https://www.googleapis.com/auth/gmail.readonly"],
+				accessType: "offline",
+				prompt: "consent",
 			},
 		},
 	});
