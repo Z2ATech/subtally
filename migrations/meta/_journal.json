@@ -15,6 +15,13 @@
       "when": 1779389658411,
       "tag": "0001_silky_sinister_six",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1780056227840,
+      "tag": "0002_plain_triathlon",
+      "breakpoints": true
     }
   ]
 }
