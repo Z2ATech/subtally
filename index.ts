@@ -9,6 +9,8 @@ export interface Env {
 
 import { createAuth } from "./src/auth";
 
+let auth: ReturnType<typeof createAuth> | null = null;
+
 export default {
 	async fetch(request: Request, env: Env) {
 		const url = new URL(request.url);
@@ -18,7 +20,7 @@ export default {
 		}
 
 		if (url.pathname.startsWith("/api/auth/")) {
-			const auth = createAuth(env);
+			if (!auth) auth = createAuth(env);
 			return auth.handler(request);
 		}
 
