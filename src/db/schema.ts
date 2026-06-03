@@ -1,14 +1,6 @@
 import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, index, uniqueIndex, check } from "drizzle-orm/sqlite-core";
-
-export const users = sqliteTable("users", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  email: text("email").notNull().unique(),
-  name: text("name"),
-  avatar_url: text("avatar_url"),
-  created_at: integer("created_at", { mode: "timestamp_ms" }).default(sql`(unixepoch() * 1000)`).$defaultFn(() => new Date()),
-  updated_at: integer("updated_at", { mode: "timestamp_ms" }).default(sql`(unixepoch() * 1000)`).$defaultFn(() => new Date()),
-});
+import { user } from "./auth-schema";
 
 export const services = sqliteTable(
   "services",
@@ -16,7 +8,7 @@ export const services = sqliteTable(
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     name: text("name").notNull(),
     description: text("description"),
-    owner_user_id: text("owner_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    owner_user_id: text("owner_user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
     created_at: integer("created_at", { mode: "timestamp_ms" }).default(sql`(unixepoch() * 1000)`).$defaultFn(() => new Date()),
     updated_at: integer("updated_at", { mode: "timestamp_ms" }).default(sql`(unixepoch() * 1000)`).$defaultFn(() => new Date()),
   },
@@ -30,7 +22,7 @@ export const subscriptions = sqliteTable(
   "subscriptions",
   {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-    user_id: text("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+    user_id: text("user_id").notNull().references(() => user.id, { onDelete: "restrict" }),
     service_id: text("service_id").notNull().references(() => services.id, { onDelete: "restrict" }),
     plan: text("plan"),
     price_cents: integer("price_cents"),
