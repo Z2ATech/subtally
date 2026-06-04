@@ -34,7 +34,7 @@ export default {
 			const after = url.searchParams.get("after");
 			const before = url.searchParams.get("before");
 
-			const parts = ["subject:(subscription OR invoice OR receipt OR billing OR payment OR renewal OR order)"];
+			const parts = ["subject:(subscription OR invoice OR receipt OR billing OR payment OR renewal OR order OR bill OR statement OR charge OR charged OR debit OR transaction OR purchase OR overdue OR \"auto-pay\" OR autopay OR \"payment due\" OR \"amount due\")"];
 			if (after) parts.push(`after:${after.replace(/-/g, "/")}`);
 			if (before) parts.push(`before:${before.replace(/-/g, "/")}`);
 
