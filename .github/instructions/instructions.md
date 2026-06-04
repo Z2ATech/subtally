@@ -76,9 +76,18 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - Auth handler mounts at `/api/auth/*`.
 - Sessions are stored in **D1** (relational, queryable) — not KV. The `SESSIONS_KV` binding name is preserved for future use (Gmail token storage), but is not used for auth sessions.
 - Better Auth's tables (`user`, `session`, `account`, `verification`) live in `src/db/auth-schema.ts`. The legacy `users` table was dropped; `subscriptions.user_id` references Better Auth's `user.id` directly.
-- Google provider requests `gmail.readonly` alongside the default OpenID scopes, with `accessType: "offline"` and `prompt: "consent"` so a refresh token is issued (reserved for future Gmail ingestion — the token itself is not yet stored anywhere persistent).
+- Google provider requests `gmail.readonly` alongside the default OpenID scopes, with `accessType: "offline"` and `prompt: "consent"` so a refresh token is issued. Better Auth persists this refresh token in the `account` table (D1) automatically — the Gmail client reads from there.
 - Required env vars (Wrangler Secrets in prod, `.env` locally): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`.
 - `nodejs_compat` compatibility flag is required (Better Auth depends on AsyncLocalStorage). Do not treat it as optional.
+
+## Gmail Ingestion (Module 1)
+
+- Gmail API client lives at `src/lib/gmail.ts`. Exports: `listMessages`, `getMessage`, `getRefreshTokenForUser`, `getAccessTokenFromRefresh`.
+- Token source: Better Auth's `account` table — query by `userId` + `providerId = 'google'`. No separate token store.
+- `fetch()` only — no googleapis SDK.
+- Raw email bodies are never persisted. Only metadata headers (`From`, `Subject`, `Date`) consumed in-memory.
+- On-demand sync only — no background polling or scheduled Workers.
+- Encrypted KV token storage (`SESSIONS_KV`) is still reserved for a future ticket; do not implement early.
 
 ## Boundaries
 
@@ -90,7 +99,7 @@ Unless explicitly requested, do not add:
 - Persistent storage of Gmail OAuth tokens (encrypted KV token storage is reserved for the Gmail ingestion module; Better Auth sessions use D1)
 - TanStack Start or any frontend framework setup
 - React Native / Expo mobile setup
-- Business logic (subscription tracking, Gmail ingestion, LLM extraction)
+- Business logic (LLM extraction, subscription auto-detection)
 - CI/CD
 - Production secrets / remote deployment
 
