@@ -82,10 +82,13 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 
 ## Gmail Ingestion (Module 1)
 
-- Gmail API client lives at `src/lib/gmail.ts`. Exports: `listMessages`, `getMessage`, `getRefreshTokenForUser`, `getAccessTokenFromRefresh`.
+- Gmail API client lives at `src/lib/gmail.ts`. Exports: `listMessages` (single page, maxResults=500), `listAllMessages` (auto-paginates all pages), `getMessage` (format=raw), `getRefreshTokenForUser`, `getAccessTokenFromRefresh`.
 - Token source: Better Auth's `account` table — query by `userId` + `providerId = 'google'`. No separate token store.
 - `fetch()` only — no googleapis SDK.
-- Raw email bodies are never persisted. Only metadata headers (`From`, `Subject`, `Date`) consumed in-memory.
+- `getMessage` uses `format=raw` — full RFC 2822 message decoded in-memory for checksum computation. Raw bytes are never persisted or logged.
+- Processing pipeline (`GET /api/gmail/scan`): `listAllMessages` → per message: decode raw → extract `From` header → extract sender domain → SHA-256(rawBytes + senderDomain) → check `subscriptions.checksum` → if new: upsert `services` + insert `subscriptions` (status=`detected`).
+- Endpoint returns `{ processed: number, skipped: number }`.
+- Schema additions: `services` has `sender_domain`, `email_count`, `last_email_at`; `subscriptions` has nullable `checksum` (unique) and `detected` status.
 - On-demand sync only — no background polling or scheduled Workers.
 - Encrypted KV token storage (`SESSIONS_KV`) is still reserved for a future ticket; do not implement early.
 

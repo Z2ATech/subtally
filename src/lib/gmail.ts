@@ -18,24 +18,7 @@ interface ListMessagesResponse {
 interface GetMessageResponse {
 	id: string;
 	threadId: string;
-	labelIds: string[];
-	snippet: string;
-	historyId: string;
-	internalDate: string;
-	payload: {
-		partId: string;
-		mimeType: string;
-		filename: string;
-		headers: Array<{ name: string; value: string }>;
-		parts?: Array<{
-			partId: string;
-			mimeType: string;
-			filename: string;
-			headers: Array<{ name: string; value: string }>;
-		}>;
-	};
-	sizeEstimate: number;
-	raw?: string;
+	raw: string;
 }
 
 /**
@@ -80,6 +63,7 @@ export async function listMessages(
 ): Promise<{ messages: Array<{ id: string; threadId: string }> | undefined; nextPageToken?: string }> {
 	const url = new URLSearchParams({
 		q: query,
+		maxResults: "50",
 		...(pageToken && { pageToken }),
 	});
 
@@ -109,10 +93,7 @@ export async function getMessage(
 	accessToken: string,
 	messageId: string
 ): Promise<GetMessageResponse> {
-	const url = new URLSearchParams({ format: "metadata" });
-	url.append("metadataHeaders", "From");
-	url.append("metadataHeaders", "Subject");
-	url.append("metadataHeaders", "Date");
+	const url = new URLSearchParams({ format: "raw" });
 
 	const response = await retryFetch(
 		`https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}?${url}`,
@@ -180,6 +161,25 @@ async function retryFetch(
 	}
 
 	throw lastError || new Error("Fetch failed after retries");
+}
+
+/**
+ * Paginate through all Gmail messages matching a query (max 500 per page)
+ */
+export async function listAllMessages(
+	accessToken: string,
+	query: string
+): Promise<Array<{ id: string; threadId: string }>> {
+	const all: Array<{ id: string; threadId: string }> = [];
+	let pageToken: string | undefined;
+
+	do {
+		const { messages, nextPageToken } = await listMessages(accessToken, query, pageToken);
+		if (messages) all.push(...messages);
+		pageToken = nextPageToken;
+	} while (pageToken);
+
+	return all;
 }
 
 /**
