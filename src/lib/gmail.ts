@@ -15,10 +15,20 @@ interface ListMessagesResponse {
 	resultSizeEstimate: number;
 }
 
-interface GetMessageResponse {
+export interface GetMessageResponse {
 	id: string;
 	threadId: string;
-	raw: string;
+	snippet: string;
+	internalDate: string;
+	payload: {
+		mimeType: string;
+		headers: Array<{ name: string; value: string }>;
+		body: { data?: string; size: number };
+		parts?: Array<{
+			mimeType: string;
+			body: { data?: string; size: number };
+		}>;
+	};
 }
 
 /**
@@ -27,10 +37,11 @@ interface GetMessageResponse {
 async function getAccessToken(
 	refreshToken: string,
 	clientId: string,
-	clientSecret: string
+	clientSecret: string,
+	tokenUrl: string
 ): Promise<string> {
 	const response = await retryFetch(
-		"https://oauth2.googleapis.com/token",
+		tokenUrl,
 		{
 			method: "POST",
 			headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -59,6 +70,7 @@ async function getAccessToken(
 export async function listMessages(
 	accessToken: string,
 	query: string,
+	apiBase: string,
 	pageToken?: string
 ): Promise<{ messages: Array<{ id: string; threadId: string }> | undefined; nextPageToken?: string }> {
 	const url = new URLSearchParams({
@@ -68,7 +80,7 @@ export async function listMessages(
 	});
 
 	const response = await retryFetch(
-		`https://www.googleapis.com/gmail/v1/users/me/messages?${url}`,
+		`${apiBase}/users/me/messages?${url}`,
 		{
 			method: "GET",
 			headers: { Authorization: `Bearer ${accessToken}` },
@@ -87,16 +99,17 @@ export async function listMessages(
 }
 
 /**
- * Get a Gmail message with metadata only
+ * Get a Gmail message with full parsed headers and payload
  */
 export async function getMessage(
 	accessToken: string,
-	messageId: string
+	messageId: string,
+	apiBase: string
 ): Promise<GetMessageResponse> {
-	const url = new URLSearchParams({ format: "raw" });
+	const url = new URLSearchParams({ format: "full" });
 
 	const response = await retryFetch(
-		`https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}?${url}`,
+		`${apiBase}/users/me/messages/${messageId}?${url}`,
 		{
 			method: "GET",
 			headers: { Authorization: `Bearer ${accessToken}` },
@@ -168,13 +181,14 @@ async function retryFetch(
  */
 export async function listAllMessages(
 	accessToken: string,
-	query: string
+	query: string,
+	apiBase: string
 ): Promise<Array<{ id: string; threadId: string }>> {
 	const all: Array<{ id: string; threadId: string }> = [];
 	let pageToken: string | undefined;
 
 	do {
-		const { messages, nextPageToken } = await listMessages(accessToken, query, pageToken);
+		const { messages, nextPageToken } = await listMessages(accessToken, query, apiBase, pageToken);
 		if (messages) all.push(...messages);
 		pageToken = nextPageToken;
 	} while (pageToken);
@@ -189,10 +203,11 @@ export async function getAccessTokenFromRefresh(
 	db: ReturnType<typeof drizzle<any>>,
 	userId: string,
 	clientId: string,
-	clientSecret: string
+	clientSecret: string,
+	tokenUrl: string
 ): Promise<string | null> {
 	const refreshToken = await getRefreshTokenForUser(db, userId);
 	if (!refreshToken) return null;
 
-	return getAccessToken(refreshToken, clientId, clientSecret);
+	return getAccessToken(refreshToken, clientId, clientSecret, tokenUrl);
 }
