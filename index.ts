@@ -12,46 +12,9 @@ import { drizzle } from "drizzle-orm/d1";
 import { createAuth } from "./src/auth";
 import * as schema from "./src/db/schema";
 import { getAccessTokenFromRefresh, listMessages, getMessage } from "./src/lib/gmail";
+import { base64urlToBytes, extractHeader, extractDomain, computeChecksum } from "./src/lib/email";
 
 let auth: ReturnType<typeof createAuth> | null = null;
-
-function base64urlToBytes(b64: string): Uint8Array {
-	const b64std = b64.replace(/-/g, "+").replace(/_/g, "/");
-	const bin = atob(b64std);
-	return Uint8Array.from(bin, (c) => c.charCodeAt(0));
-}
-
-function extractHeader(rawBytes: Uint8Array, name: string): string {
-	const text = new TextDecoder("utf-8", { fatal: false, ignoreBOM: false }).decode(rawBytes);
-	const headerEnd = text.indexOf("\r\n\r\n");
-	const headers = headerEnd >= 0 ? text.slice(0, headerEnd) : text;
-	const unfolded = headers.replace(/\r\n[ \t]+/g, " ");
-	for (const line of unfolded.split("\r\n")) {
-		const colon = line.indexOf(":");
-		if (colon > 0 && line.slice(0, colon).toLowerCase() === name.toLowerCase()) {
-			return line.slice(colon + 1).trim();
-		}
-	}
-	return "";
-}
-
-function extractDomain(from: string): string {
-	const match = from.match(/<([^>]+)>/) ?? from.match(/(\S+@\S+)/);
-	if (!match?.[1]) return "";
-	const [, domain] = match[1].split("@");
-	return domain ? domain.toLowerCase() : "";
-}
-
-async function computeChecksum(rawBytes: Uint8Array, senderDomain: string): Promise<string> {
-	const domainBytes = new TextEncoder().encode(senderDomain);
-	const combined = new Uint8Array(rawBytes.length + domainBytes.length);
-	combined.set(rawBytes);
-	combined.set(domainBytes, rawBytes.length);
-	const buf = await crypto.subtle.digest("SHA-256", combined);
-	return Array.from(new Uint8Array(buf))
-		.map((b) => b.toString(16).padStart(2, "0"))
-		.join("");
-}
 
 export default {
 	async fetch(request: Request, env: Env) {
@@ -84,60 +47,67 @@ export default {
 				let processed = 0;
 				let skipped = 0;
 
-				for (const { id } of messages ?? []) {
-					try {
-						const msg = await getMessage(accessToken, id);
-						const rawBytes = base64urlToBytes(msg.raw);
-						const from = extractHeader(rawBytes, "From");
-						const senderDomain = extractDomain(from);
-						if (!senderDomain) { skipped++; continue; }
+				const CHUNK_SIZE = 10;
+				const all = messages ?? [];
+				for (let i = 0; i < all.length; i += CHUNK_SIZE) {
+					const chunk = all.slice(i, i + CHUNK_SIZE);
+					await Promise.all(chunk.map(async ({ id }) => {
+						try {
+							const msg = await getMessage(accessToken, id);
+							const rawBytes = base64urlToBytes(msg.raw);
+							const from = extractHeader(rawBytes, "From");
+							const senderDomain = extractDomain(from);
+							if (!senderDomain) { skipped++; return; }
 
-						const checksum = await computeChecksum(rawBytes, senderDomain);
+							const checksum = await computeChecksum(rawBytes, senderDomain);
 
-						const existing = await db
-							.select({ id: schema.subscriptions.id })
-							.from(schema.subscriptions)
-							.where(eq(schema.subscriptions.checksum, checksum))
-							.limit(1);
+							const existing = await db
+								.select({ id: schema.subscriptions.id })
+								.from(schema.subscriptions)
+								.where(eq(schema.subscriptions.checksum, checksum))
+								.limit(1);
 
-						if (existing.length > 0) { skipped++; continue; }
+							if (existing.length > 0) { skipped++; return; }
 
-						const rows = await db
-							.insert(schema.services)
-							.values({
-								name: senderDomain,
-								owner_user_id: session.user.id,
-								sender_domain: senderDomain,
-								email_count: 1,
-								last_email_at: new Date(),
-							})
-							.onConflictDoUpdate({
-								target: [schema.services.owner_user_id, schema.services.sender_domain],
-								set: {
-									email_count: sql`${schema.services.email_count} + 1`,
+							const rows = await db
+								.insert(schema.services)
+								.values({
+									name: senderDomain,
+									owner_user_id: session.user.id,
+									sender_domain: senderDomain,
+									email_count: 1,
 									last_email_at: new Date(),
-									updated_at: new Date(),
-								},
-							})
-							.returning({ id: schema.services.id });
+								})
+								.onConflictDoUpdate({
+									target: [schema.services.owner_user_id, schema.services.sender_domain],
+									set: {
+										email_count: sql`${schema.services.email_count} + 1`,
+										last_email_at: new Date(),
+										updated_at: new Date(),
+									},
+								})
+								.returning({ id: schema.services.id });
 
-						if (!rows[0]) { skipped++; continue; }
+							if (!rows[0]) { skipped++; return; }
 
-						await db.insert(schema.subscriptions).values({
-							user_id: session.user.id,
-							service_id: rows[0].id,
-							status: "detected",
-							checksum,
-						});
+							await db.insert(schema.subscriptions).values({
+								user_id: session.user.id,
+								service_id: rows[0].id,
+								status: "detected",
+								checksum,
+							});
 
-						processed++;
-					} catch {
-						skipped++;
-					}
+							processed++;
+						} catch (err) {
+							console.error(`Failed to process message ${id}:`, err);
+							skipped++;
+						}
+					}));
 				}
 
 				return Response.json({ processed, skipped, ...(nextPageToken && { nextPageToken }) });
-			} catch {
+			} catch (err) {
+				console.error("Gmail scan error:", err);
 				return new Response("Gmail fetch failed", { status: 502 });
 			}
 		}
