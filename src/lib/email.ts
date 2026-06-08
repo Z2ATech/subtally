@@ -1,4 +1,4 @@
-import type { GetMessageResponse } from "../lib/gmail";
+import type { GetMessageResponse, MessagePart } from "../lib/gmail";
 
 export function base64urlToBytes(b64: string): Uint8Array {
 	const b64std = b64.replace(/-/g, "+").replace(/_/g, "/");
@@ -7,11 +7,25 @@ export function base64urlToBytes(b64: string): Uint8Array {
 }
 
 export function extractBodyBytes(payload: GetMessageResponse["payload"]): Uint8Array {
-	if (payload.body.data) return base64urlToBytes(payload.body.data);
-	const textPart = payload.parts?.find((p) => p.mimeType === "text/plain")
-		?? payload.parts?.find((p) => p.mimeType === "text/html");
-	if (textPart?.body.data) return base64urlToBytes(textPart.body.data);
-	return new Uint8Array(0);
+	const queue: MessagePart[] = [payload];
+	let htmlFallback: Uint8Array | null = null;
+
+	while (queue.length > 0) {
+		const part = queue.shift()!;
+
+		if (part.mimeType === "text/plain" && part.body?.data) {
+			return base64urlToBytes(part.body.data);
+		}
+		if (part.mimeType === "text/html" && part.body?.data && !htmlFallback) {
+			htmlFallback = base64urlToBytes(part.body.data);
+		}
+		if (part.parts) {
+			queue.push(...part.parts);
+		}
+	}
+
+	if (payload.body?.data) return base64urlToBytes(payload.body.data);
+	return htmlFallback ?? new Uint8Array(0);
 }
 
 export function extractDomain(from: string): string {
