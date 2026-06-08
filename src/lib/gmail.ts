@@ -15,19 +15,19 @@ interface ListMessagesResponse {
 	resultSizeEstimate: number;
 }
 
+export interface MessagePart {
+	mimeType: string;
+	body: { data?: string; size: number };
+	parts?: MessagePart[];
+}
+
 export interface GetMessageResponse {
 	id: string;
 	threadId: string;
 	snippet: string;
 	internalDate: string;
-	payload: {
-		mimeType: string;
+	payload: MessagePart & {
 		headers: Array<{ name: string; value: string }>;
-		body: { data?: string; size: number };
-		parts?: Array<{
-			mimeType: string;
-			body: { data?: string; size: number };
-		}>;
 	};
 }
 

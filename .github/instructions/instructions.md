@@ -70,6 +70,20 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - Workers KV is plaintext by default and is **not** a secret store. Use it only for dynamic data (sessions, caches), and apply app-layer encryption if the values are sensitive.
 - Local development secrets go in `.env` (gitignored). A committed `.env.example` documents which keys are required. Do not use `.dev.vars` — this project standardizes on `.env`.
 
+## Constants & URL Management
+
+- **All** external-facing string constants — API endpoint URLs, OAuth scopes, model identifiers, or any value that could change between environments — must **never** be hardcoded in source files.
+- Every such value must follow this exact workflow:
+  1. Add the key + default value to `wrangler.toml` under `[vars]`.
+  2. Add the key + example value to `.env.example`.
+  3. Add the key as `string` to the `Env` interface in `index.ts`.
+  4. Add the key to the `getConstants(env)` return object in `src/constants.ts`.
+  5. Consume it via `getConstants(env)` or directly from `env.*` — never from a module-level `const`.
+- `src/constants.ts` exports `getConstants(env: Env)` which reads all values from `Env` bindings.
+- Current vars: `GMAIL_TOKEN_URL`, `GMAIL_API_BASE`, `OPENAI_API_BASE`, `OPENAI_MODEL`, `GMAIL_READONLY_SCOPE`.
+- All functions that make external HTTP calls accept URL params rather than hardcoding them.
+- If you are tempted to write `const FOO = "https://..."` or `const FOO = "some-scope"` anywhere in source, stop — it belongs in `wrangler.toml` `[vars]` and `.env.example` instead.
+
 ## Authentication
 
 - Auth framework: **Better Auth** with the Drizzle D1 adapter. Do not roll custom OAuth flows.
@@ -82,15 +96,28 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 
 ## Gmail Ingestion (Module 1)
 
-- Gmail API client lives at `src/lib/gmail.ts`. Exports: `listMessages` (single page, maxResults=500), `listAllMessages` (auto-paginates all pages), `getMessage` (format=raw), `getRefreshTokenForUser`, `getAccessTokenFromRefresh`.
+- Gmail API client lives at `src/lib/gmail.ts`. Exports: `listMessages` (single page, maxResults=500), `listAllMessages` (auto-paginates all pages), `getMessage` (format=full), `getRefreshTokenForUser`, `getAccessTokenFromRefresh`.
 - Token source: Better Auth's `account` table — query by `userId` + `providerId = 'google'`. No separate token store.
 - `fetch()` only — no googleapis SDK.
-- `getMessage` uses `format=raw` — full RFC 2822 message decoded in-memory for checksum computation. Raw bytes are never persisted or logged.
-- Processing pipeline (`GET /api/gmail/scan`): `listAllMessages` → per message: decode raw → extract `From` header → extract sender domain → SHA-256(rawBytes + senderDomain) → check `subscriptions.checksum` → if new: upsert `services` + insert `subscriptions` (status=`detected`).
+- `getMessage` uses `format=full` — returns parsed headers + body. Raw bytes never persisted or logged.
+- Email parsing utilities live at `src/lib/email.ts`: `base64urlToBytes`, `extractBodyBytes`, `extractDomain`, `computeChecksum`.
+- Processing pipeline (`GET /api/gmail/scan`): `listAllMessages` → chunked parallel (n=10) → per message: `getMessage` → `extractBodyBytes` → `extractDomain` (from `payload.headers`) → SHA-256(bodyBytes + senderDomain) → check `processed_emails` table → if new: anonymize → LLM extract → if `email_type` is `subscription/renewal/cancellation`: upsert `services` + upsert `subscriptions` (on user_id+service_id) + create `subscription_events` → insert `processed_emails`.
 - Endpoint returns `{ processed: number, skipped: number }`.
-- Schema additions: `services` has `sender_domain`, `email_count`, `last_email_at`; `subscriptions` has nullable `checksum` (unique) and `detected` status.
 - On-demand sync only — no background polling or scheduled Workers.
 - Encrypted KV token storage (`SESSIONS_KV`) is still reserved for a future ticket; do not implement early.
+
+## LLM Extraction (Module 3)
+
+- PII anonymizer lives at `src/lib/anonymizer.ts`. Export: `anonymize(text: string): string`. Redacts emails, phones, addresses, card numbers. Preserves amounts, dates, vendor names.
+- LLM client lives at `src/lib/llm.ts`. Export: `extractSubscriptionData(text, apiBase, apiKey, model): Promise<LLMExtraction | null>`. Uses `fetch()` only, `temperature: 0`, returns `null` on failure.
+- System prompt lives at `src/prompts/subscription-extraction.ts` — exported as a named constant. Edit this file to change extraction behaviour without touching client logic.
+- Model: `env.OPENAI_MODEL` (currently `gpt-5.4-mini`). Key: `env.OPENAI_API_SECRET`.
+- `LLMExtraction` shape: `vendor_name`, `amount` (decimal), `currency` (ISO 4217), `frequency`, `next_billing_date` (YYYY-MM-DD), `category`, `email_type`.
+- `email_type` values: `subscription | renewal | cancellation | unknown`. No `receipt` type — recurring payment receipts map to `renewal`.
+- Status derivation: `cancellation` → `cancelled`; `subscription/renewal` → `active`; `unknown` or null → skip (do not persist).
+- Schema: `subscriptions` has `vendor_name`, `currency`, `billing_frequency`, `next_billing_date`, `category`, `email_type`; `subscription_events` has `amount_cents`; `processed_emails` table stores `(user_id, checksum)` for deduplication.
+- Dedup key: `processed_emails (user_id, checksum)` — not `subscriptions.checksum`.
+- Subscriptions is one-record-per-service: unique on `(user_id, service_id)`, upserted on conflict.
 
 ## Boundaries
 
@@ -102,7 +129,6 @@ Unless explicitly requested, do not add:
 - Persistent storage of Gmail OAuth tokens (encrypted KV token storage is reserved for the Gmail ingestion module; Better Auth sessions use D1)
 - TanStack Start or any frontend framework setup
 - React Native / Expo mobile setup
-- Business logic (LLM extraction, subscription auto-detection)
 - CI/CD
 - Production secrets / remote deployment
 
