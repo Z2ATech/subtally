@@ -36,7 +36,7 @@ export const subscriptions = sqliteTable(
     next_billing_date: integer("next_billing_date", { mode: "timestamp_ms" }),
     category: text("category"),
     email_type: text("email_type"),
-    status: text("status", { enum: ["active", "cancelled", "expired", "detected"] }).notNull().default("active"),
+    status: text("status", { enum: ["active", "cancelled", "expired", "detected", "unknown"] }).notNull().default("active"),
     started_at: integer("started_at", { mode: "timestamp_ms" }).default(sql`(unixepoch() * 1000)`).$defaultFn(() => new Date()),
     ended_at: integer("ended_at", { mode: "timestamp_ms" }),
     created_at: integer("created_at", { mode: "timestamp_ms" }).default(sql`(unixepoch() * 1000)`).$defaultFn(() => new Date()),
@@ -47,7 +47,7 @@ export const subscriptions = sqliteTable(
     index("idx_subscriptions_service").on(t.service_id),
     index("idx_subscriptions_status").on(t.status),
     uniqueIndex("uniq_subscriptions_user_service").on(t.user_id, t.service_id),
-    check("chk_subscriptions_status", sql`${t.status} in ('active', 'cancelled', 'expired', 'detected')`),
+    check("chk_subscriptions_status", sql`${t.status} in ('active', 'cancelled', 'expired', 'detected', 'unknown')`),
     check("chk_subscriptions_price_cents", sql`${t.price_cents} is null or ${t.price_cents} >= 0`),
   ]
 );
