@@ -16,6 +16,7 @@ export interface LLMExtraction {
     | "other"
     | null;
   email_type: "subscription" | "cancellation" | "renewal" | "unknown";
+  confidence: number;
 }
 
 export async function extractSubscriptionData(

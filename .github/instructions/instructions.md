@@ -101,8 +101,9 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - `fetch()` only — no googleapis SDK.
 - `getMessage` uses `format=full` — returns parsed headers + body. Raw bytes never persisted or logged.
 - Email parsing utilities live at `src/lib/email.ts`: `base64urlToBytes`, `extractBodyBytes`, `extractDomain`, `computeChecksum`.
-- Processing pipeline (`GET /api/gmail/scan`): `listAllMessages` → chunked parallel (n=10) → per message: `getMessage` → `extractBodyBytes` → `extractDomain` (from `payload.headers`) → SHA-256(bodyBytes + senderDomain) → check `processed_emails` table → if new: anonymize → LLM extract → if `email_type` is `subscription/renewal/cancellation`: upsert `services` + upsert `subscriptions` (on user_id+service_id) + create `subscription_events` → insert `processed_emails`.
-- Endpoint returns `{ processed: number, skipped: number }`.
+- Scan route handler lives at `src/routes/gmail.ts` (`handleGmailScan`); `index.ts` is a thin router.
+- Processing pipeline (`GET /api/gmail/scan`): paginated `listMessages` → chunked parallel (n=10) → per message: `getMessage` → `extractBodyBytes` → `extractDomain` → SHA-256(bodyBytes + senderDomain) → check `processed_emails` → if new: anonymize → LLM extract → skip if `unknown`/null/low-confidence → upsert `services` + upsert `subscriptions` + create `subscription_events` → insert `processed_emails`. After all chunks: reconciliation pass re-derives status from latest event.
+- Endpoint returns `{ processed, skipped, nextPageToken? }`.
 - On-demand sync only — no background polling or scheduled Workers.
 - Encrypted KV token storage (`SESSIONS_KV`) is still reserved for a future ticket; do not implement early.
 
@@ -111,13 +112,19 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - PII anonymizer lives at `src/lib/anonymizer.ts`. Export: `anonymize(text: string): string`. Redacts emails, phones, addresses, card numbers. Preserves amounts, dates, vendor names.
 - LLM client lives at `src/lib/llm.ts`. Export: `extractSubscriptionData(text, apiBase, apiKey, model): Promise<LLMExtraction | null>`. Uses `fetch()` only, `temperature: 0`, returns `null` on failure.
 - System prompt lives at `src/prompts/subscription-extraction.ts` — exported as a named constant. Edit this file to change extraction behaviour without touching client logic.
-- Model: `env.OPENAI_MODEL` (currently `gpt-5.4-mini`). Key: `env.OPENAI_API_SECRET`.
-- `LLMExtraction` shape: `vendor_name`, `amount` (decimal), `currency` (ISO 4217), `frequency`, `next_billing_date` (YYYY-MM-DD), `category`, `email_type`.
+- Model: `env.OPENAI_MODEL`. Key: `env.OPENAI_API_SECRET`.
+- `LLMExtraction` shape: `vendor_name`, `amount` (decimal), `currency` (ISO 4217), `frequency`, `next_billing_date` (YYYY-MM-DD), `category`, `email_type`, `confidence` (0-1).
 - `email_type` values: `subscription | renewal | cancellation | unknown`. No `receipt` type — recurring payment receipts map to `renewal`.
-- Status derivation: `cancellation` → `cancelled`; `subscription/renewal` → `active`; `unknown` or null → skip (do not persist).
-- Schema: `subscriptions` has `vendor_name`, `currency`, `billing_frequency`, `next_billing_date`, `category`, `email_type`; `subscription_events` has `amount_cents`; `processed_emails` table stores `(user_id, checksum)` for deduplication.
+- Noise filtering is generic, not hardcoded: the prompt instructs the LLM to return `unknown` for any bank / wallet / payment-processor transaction alert (the named merchant in such alerts is not a subscription), and to emit a `confidence` score. The pipeline skips `unknown`, null, and confidence < 0.7. No per-user or per-domain hardcoded lists.
+- Status derivation: `cancellation` → `cancelled`; `subscription/renewal` → `active`; threshold silence → `unknown`. Derived from latest event by `occurred_at`, not processing order. Pure function in `src/lib/status.ts` (`deriveStatus`).
+- Schema: `subscriptions` has `vendor_name`, `currency`, `billing_frequency`, `next_billing_date`, `category`, `email_type`, status enum includes `unknown`; `subscription_events` has `amount_cents`, `occurred_at` (Gmail `internalDate`); `processed_emails` stores `(user_id, checksum)`.
+- `confidence` is used in-memory only — never persisted (no schema column).
 - Dedup key: `processed_emails (user_id, checksum)` — not `subscriptions.checksum`.
 - Subscriptions is one-record-per-service: unique on `(user_id, service_id)`, upserted on conflict.
+
+## Known Limitations
+
+- Service grouping is by sender domain. Vendors sharing a domain (all Google services on `google.com`) collide into one subscription record. App-store-billed subscriptions (e.g. Spotify via Google Play) are attributed to the platform domain, not the vendor's own domain — so a service can appear both directly and via a platform. Vendor-based grouping is a future architectural change, not yet implemented.
 
 ## Boundaries
 
