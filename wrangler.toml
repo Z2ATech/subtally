@@ -1,0 +1,19 @@
+name = "subtally"
+main = "index.ts"
+compatibility_date = "2026-05-14"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+GMAIL_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1"
+OPENAI_API_BASE = "https://api.openai.com/v1"
+OPENAI_MODEL = "gpt-5.4-mini"
+GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "subtally_db"
+
+[[kv_namespaces]]
+binding = "SESSIONS_KV"
+preview_id = "sessions_kv_preview"

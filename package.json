@@ -1,0 +1,26 @@
+{
+  "name": "subtally",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:migrate:local": "wrangler d1 migrations apply subtally_db --local"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260511.1",
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.31.10",
+    "wrangler": "^4.90.1"
+  },
+  "peerDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "better-auth": "^1.6.11",
+    "drizzle-orm": "^0.45.2"
+  }
+}
