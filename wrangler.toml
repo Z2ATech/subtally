@@ -17,3 +17,9 @@ database_name = "subtally_db"
 [[kv_namespaces]]
 binding = "SESSIONS_KV"
 preview_id = "sessions_kv_preview"
+
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }

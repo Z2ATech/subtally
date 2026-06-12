@@ -4,6 +4,7 @@ import type { SQL } from "drizzle-orm";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
+import { checkRateLimit } from "../lib/ratelimit";
 
 const STATUSES = ["active", "cancelled", "expired", "detected", "unknown"] as const;
 type SubscriptionStatus = (typeof STATUSES)[number];
@@ -36,6 +37,9 @@ export async function handleReadRoutes(
 	const session = await auth.api.getSession({ headers: request.headers });
 	if (!session?.user) return jsonError("Unauthorized", 401);
 
+	const rateLimitResponse = await checkRateLimit(env.RATE_LIMITER, session.user.id);
+	if (rateLimitResponse) return rateLimitResponse;
+
 	if (request.method !== "GET") return jsonError("Method Not Allowed", 405);
 
 	const db = drizzle(env.DB);
@@ -50,12 +54,11 @@ export async function handleReadRoutes(
 			return jsonError("Invalid status", 400);
 		}
 
-		const conditions: SQL[] = [eq(schema.subscriptions.user_id, session.user.id)];
+		const conditions: SQL[] = [];
 		if (statusParam) conditions.push(eq(schema.subscriptions.status, statusParam));
 		if (serviceId) conditions.push(eq(schema.subscriptions.service_id, serviceId));
 
-		const rows = await subscriptionSelect(db)
-			.where(and(...conditions))
+		const rows = await subscriptionSelect(db, session.user.id, and(...conditions))
 			.orderBy(desc(schema.subscriptions.updated_at));
 
 		return Response.json(rows.map(mapSubscription));
@@ -65,8 +68,7 @@ export async function handleReadRoutes(
 		const id = decodeURIComponent(pathname.slice("/api/subscriptions/".length));
 		if (!id || id.includes("/")) return jsonError("Not Found", 404);
 
-		const rows = await subscriptionSelect(db)
-			.where(and(eq(schema.subscriptions.user_id, session.user.id), eq(schema.subscriptions.id, id)))
+		const rows = await subscriptionSelect(db, session.user.id, eq(schema.subscriptions.id, id))
 			.limit(1);
 
 		if (!rows[0]) return jsonError("Not Found", 404);
@@ -138,18 +140,18 @@ export async function handleReadRoutes(
 	}
 
 	if (pathname === "/api/upcoming") {
-		const now = new Date();
-		const inThirtyDays = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+		const nowMs = Date.now();
+		const inThirtyDaysMs = nowMs + 30 * 24 * 60 * 60 * 1000;
 
-		const rows = await subscriptionSelect(db)
-			.where(
-				and(
-					eq(schema.subscriptions.user_id, session.user.id),
-					eq(schema.subscriptions.status, "active"),
-					gte(schema.subscriptions.next_billing_date, now),
-					lte(schema.subscriptions.next_billing_date, inThirtyDays),
-				),
-			)
+		const rows = await subscriptionSelect(
+			db,
+			session.user.id,
+			and(
+				eq(schema.subscriptions.status, "active"),
+				gte(schema.subscriptions.next_billing_date, sql`${nowMs}`),
+				lte(schema.subscriptions.next_billing_date, sql`${inThirtyDaysMs}`),
+			),
+		)
 			.orderBy(asc(schema.subscriptions.next_billing_date));
 
 		return Response.json(rows.map(mapSubscription));
@@ -186,7 +188,11 @@ export async function handleReadRoutes(
 	return jsonError("Not Found", 404);
 }
 
-function subscriptionSelect(db: ReturnType<typeof drizzle>) {
+function subscriptionSelect(
+	db: ReturnType<typeof drizzle>,
+	userId: string,
+	condition?: SQL,
+) {
 	return db
 		.select({
 			id: schema.subscriptions.id,
@@ -208,7 +214,8 @@ function subscriptionSelect(db: ReturnType<typeof drizzle>) {
 			service_last_email_at: schema.services.last_email_at,
 		})
 		.from(schema.subscriptions)
-		.innerJoin(schema.services, eq(schema.subscriptions.service_id, schema.services.id));
+		.innerJoin(schema.services, eq(schema.subscriptions.service_id, schema.services.id))
+		.where(and(eq(schema.subscriptions.user_id, userId), condition));
 }
 
 function mapSubscription(row: SubscriptionRow) {
