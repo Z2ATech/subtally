@@ -19,6 +19,16 @@ You are working on **SubTally**, a Cloudflare Workers project.
 - Follow the project's current structure and conventions.
 - Do not modify unrelated files.
 
+## Repo Structure
+
+This is a light monorepo using Bun workspaces:
+
+- Root (`/`) — Cloudflare Workers backend API. Entry point: `index.ts`. All backend code lives here.
+- `apps/web/` — TanStack Start frontend app. Separate Worker, separate `wrangler.toml`.
+- `packages/core/` — Shared TypeScript types only (API response shapes). No Drizzle schema. No runtime logic.
+
+The backend stays at repo root — it is not inside `apps/`. Do not move or restructure it.
+
 ## Current Tech Context
 
 This project uses:
@@ -28,18 +38,21 @@ This project uses:
 - **Cloudflare Workers**
 - **Wrangler**
 - **wrangler.toml** for Cloudflare configuration
-- **Cloudflare D1** for database storage
+- **Cloudflare D1** for database storage (backend only)
 - **Cloudflare KV** for session or temporary key-value storage
-- **Drizzle ORM** for D1 schema definition and migration generation
+- **Drizzle ORM** for D1 schema definition and migration generation (backend only)
 - **Better Auth** as the authentication framework (Google OAuth provider, sessions stored in D1)
+- **TanStack Start** for the frontend web app (`apps/web/`)
+- **Tailwind CSS + shadcn/ui** for frontend UI
+- **TanStack Query** for server state in the frontend
+- **@better-auth/react** for frontend session handling
 
 ## Cloudflare Setup Rules
 
 - Use `wrangler.toml`, not `wrangler.jsonc`.
-- Keep the Worker entry simple unless the project grows naturally.
-- Prefer the existing root `index.ts` entry file unless there is a clear reason to move it.
-- Use official Cloudflare/Wrangler documentation or CLI help when unsure.
-- Local development should run through Wrangler.
+- Backend Worker name: `subtally`. Entry: `index.ts`.
+- Frontend Worker name: `subtally-web`. Entry: `.output/server/index.mjs` (built by Vinxi).
+- Local development: backend via `wrangler dev` (root), frontend via `vinxi dev` (`apps/web/`).
 - Do not require Cloudflare dashboard setup unless remote resources are actually needed.
 
 ## Binding Conventions
@@ -52,6 +65,15 @@ Use clear binding names:
 For local setup, configure bindings in `wrangler.toml`.
 
 Do not create remote resource IDs manually or guess IDs. If remote D1/KV resources are needed, explain the command or manual step required.
+
+## packages/core
+
+- Package name: `@subtally/core`
+- Contains TypeScript types only — API response shapes consumed by `apps/web`
+- Source of truth: `packages/core/src/index.ts`
+- Types: `Subscription`, `SubscriptionDetail`, `SubscriptionEvent`, `SubscriptionStatus`, `Service`, `Stats`
+- Do not add Drizzle schema, runtime logic, or backend imports here
+- `apps/web` imports from `@subtally/core`
 
 ## Database Schema (Drizzle)
 
@@ -83,6 +105,7 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - Current vars: `GMAIL_TOKEN_URL`, `GMAIL_API_BASE`, `OPENAI_API_BASE`, `OPENAI_MODEL`, `GMAIL_READONLY_SCOPE`.
 - All functions that make external HTTP calls accept URL params rather than hardcoding them.
 - If you are tempted to write `const FOO = "https://..."` or `const FOO = "some-scope"` anywhere in source, stop — it belongs in `wrangler.toml` `[vars]` and `.env.example` instead.
+- `apps/web` has its own env vars in `apps/web/wrangler.toml`. Key var: `API_BASE_URL` (points to backend Worker URL).
 
 ## Authentication
 
@@ -93,6 +116,7 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - Google provider requests `gmail.readonly` alongside the default OpenID scopes, with `accessType: "offline"` and `prompt: "consent"` so a refresh token is issued. Better Auth persists this refresh token in the `account` table (D1) automatically — the Gmail client reads from there.
 - Required env vars (Wrangler Secrets in prod, `.env` locally): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`.
 - `nodejs_compat` compatibility flag is required (Better Auth depends on AsyncLocalStorage). Do not treat it as optional.
+- Frontend (`apps/web`) uses `@better-auth/react` for session state. Auth guard: redirect to `/signin` if no session.
 
 ## Gmail Ingestion (Module 1)
 
@@ -133,6 +157,18 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - Endpoints: `GET /api/subscriptions` (filterable by `status`, `service_id`), `GET /api/subscriptions/:id` (+ events timeline), `GET /api/services` (+ active subscription count), `GET /api/upcoming` (next 30 days), `GET /api/stats` (`active_count`, `monthly_spend`, `upcoming_count`, `last_scan_at`).
 - `last_scan_at` is derived from `MAX(processed_emails.created_at)` scoped to `user_id`.
 
+## Web App (Module 5 — apps/web)
+
+- Framework: TanStack Start on Cloudflare Workers, built with Vinxi.
+- File-based routing under `apps/web/app/routes/`.
+- Server functions call the backend API over HTTP using `API_BASE_URL` env var — never import backend code directly.
+- Auth in frontend: `@better-auth/react` session hook. Unauthenticated users redirect to `/signin`.
+- Routes: `/` (redirect), `/signin`, `/dashboard`, `/dashboard/history`, `/dashboard/upcoming`, `/dashboard/services`, `/settings`.
+- Server functions: `getSubscriptions(filter)`, `getSubscription(id)`, `getServices()`, `getUpcoming()`, `getStats()`, `triggerScan()`.
+- UI: functional first — Tailwind CSS + shadcn/ui. Mobile-first, 375px viewport, tap targets ≥ 44px.
+- Dev command: `bun run dev:web` from repo root.
+- Do not import from `src/` (backend). Import shared types from `@subtally/core` only.
+
 ## Known Limitations
 
 - Service grouping is by sender domain. Vendors sharing a domain (all Google services on `google.com`) collide into one subscription record. App-store-billed subscriptions (e.g. Spotify via Google Play) are attributed to the platform domain, not the vendor's own domain — so a service can appear both directly and via a platform. Vendor-based grouping is a future architectural change, not yet implemented.
@@ -145,8 +181,7 @@ Unless explicitly requested, do not add:
 
 - Additional Better Auth features beyond what the active ticket requires (MFA, magic links, email/password, account linking, etc.)
 - Persistent storage of Gmail OAuth tokens (encrypted KV token storage is reserved for the Gmail ingestion module; Better Auth sessions use D1)
-- TanStack Start or any frontend framework setup
-- React Native / Expo mobile setup
+- React Native / Expo mobile setup (`apps/mobile/` is a future task)
 - CI/CD
 - Production secrets / remote deployment
 
@@ -165,10 +200,15 @@ Only implement the current assigned task.
 
 Use minimal Bun-compatible scripts. Add scripts only when needed.
 
+Root scripts:
+- `dev:api` — `wrangler dev` (backend)
+- `dev:web` — `bun run --cwd apps/web dev` (frontend)
+
 ## Local Dev Note
 
 - Wrangler's CLI host requires Node.js on PATH even though Bun is the package manager and the Worker runs in workerd. If `bun run dev` fails with "Wrangler does not support the Bun runtime" / "Unexpected server response: 101", ensure Node is installed and on PATH.
 - Run/initiate OAuth from `localhost:8787` (matching `BETTER_AUTH_URL`), not `127.0.0.1` — cookie scope mismatch otherwise causes `state_not_found`.
+- Run both backend and frontend simultaneously in separate terminals during development.
 
 ## Validation
 

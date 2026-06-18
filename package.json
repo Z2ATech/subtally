@@ -3,8 +3,11 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "wrangler dev",
+    "dev:web": "bun run --cwd apps/web dev",
+    "dev:api": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",

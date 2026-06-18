@@ -1,0 +1,7 @@
+name = "subtally-web"
+compatibility_date = "2026-05-14"
+compatibility_flags = ["nodejs_compat"]
+main = "@tanstack/react-start/server-entry"
+
+[vars]
+API_BASE_URL = "http://localhost:8787"
