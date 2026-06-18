@@ -3,9 +3,9 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { drizzle } from "drizzle-orm/d1";
 import * as authSchema from "./db/auth-schema";
 
-export function createAuth(env: { DB: D1Database; GOOGLE_CLIENT_ID: string; GOOGLE_CLIENT_SECRET: string; BETTER_AUTH_SECRET: string; BETTER_AUTH_URL: string; GMAIL_READONLY_SCOPE: string }) {
+export function createAuth(env: { DB: D1Database; GOOGLE_CLIENT_ID: string; GOOGLE_CLIENT_SECRET: string; BETTER_AUTH_SECRET: string; BETTER_AUTH_URL: string; GMAIL_READONLY_SCOPE: string; WEB_APP_URL: string }) {
 	const db = drizzle(env.DB);
-	
+
 	return betterAuth({
 		database: drizzleAdapter(db, {
 			provider: "sqlite",
@@ -13,6 +13,7 @@ export function createAuth(env: { DB: D1Database; GOOGLE_CLIENT_ID: string; GOOG
 		}),
 		secret: env.BETTER_AUTH_SECRET,
 		baseURL: env.BETTER_AUTH_URL,
+		trustedOrigins: [env.WEB_APP_URL],
 		socialProviders: {
 			google: {
 				enabled: true,
