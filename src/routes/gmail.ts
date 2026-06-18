@@ -9,6 +9,7 @@ import { extractBodyBytes, extractDomain, computeChecksum } from "../lib/email";
 import { anonymize } from "../lib/anonymizer";
 import { extractSubscriptionData } from "../lib/llm";
 import { deriveStatus } from "../lib/status";
+import { checkRateLimit } from "../lib/ratelimit";
 
 export async function handleGmailScan(
 	request: Request,
@@ -19,6 +20,9 @@ export async function handleGmailScan(
 	const constants = getConstants(env);
 	const session = await auth.api.getSession({ headers: request.headers });
 	if (!session) return new Response("Unauthorized", { status: 401 });
+
+	const rateLimitResponse = await checkRateLimit(env.RATE_LIMITER, session.user.id);
+	if (rateLimitResponse) return rateLimitResponse;
 
 	const db = drizzle(env.DB);
 	const accessToken = await getAccessTokenFromRefresh(

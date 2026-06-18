@@ -122,6 +122,17 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - Dedup key: `processed_emails (user_id, checksum)` — not `subscriptions.checksum`.
 - Subscriptions is one-record-per-service: unique on `(user_id, service_id)`, upserted on conflict.
 
+## Read API (Module 5)
+
+- All read route handlers live in `src/routes/read.ts`, exported as `handleReadRoutes(request, env, auth)`.
+- Auth guard uses `session?.user` — not `!session`. Better Auth returns a truthy object (not null) when no cookie is present; checking `!session` bypasses the guard silently.
+- Rate limiting: `src/lib/ratelimit.ts` exports `checkRateLimit(rateLimiter, userId)`. Applied after auth guard in both `src/routes/read.ts` and `src/routes/gmail.ts`. Binding: `RATE_LIMITER` (Cloudflare RateLimit, 60 req/60s per user, declared in `wrangler.toml` under `[[unsafe.bindings]]`). Binding type in `Env` is `RateLimit`.
+- `subscriptionSelect(db, userId)` bakes `subscriptions.user_id = userId` into the query — callers must not add a redundant user scope condition.
+- All date comparisons use raw ms integers (`Date.now()`, `timestamp + offset`) — not `Date` objects. Schema uses `timestamp_ms` mode throughout.
+- `index.ts` initialises `auth` once at the top of the fetch handler — not per-route block.
+- Endpoints: `GET /api/subscriptions` (filterable by `status`, `service_id`), `GET /api/subscriptions/:id` (+ events timeline), `GET /api/services` (+ active subscription count), `GET /api/upcoming` (next 30 days), `GET /api/stats` (`active_count`, `monthly_spend`, `upcoming_count`, `last_scan_at`).
+- `last_scan_at` is derived from `MAX(processed_emails.created_at)` scoped to `user_id`.
+
 ## Known Limitations
 
 - Service grouping is by sender domain. Vendors sharing a domain (all Google services on `google.com`) collide into one subscription record. App-store-billed subscriptions (e.g. Spotify via Google Play) are attributed to the platform domain, not the vendor's own domain — so a service can appear both directly and via a platform. Vendor-based grouping is a future architectural change, not yet implemented.
