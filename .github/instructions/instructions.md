@@ -177,6 +177,15 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - `API_BASE_URL` is in `apps/web/wrangler.toml` for prod. For Vite dev (no Cloudflare plugin), expose it via `apps/web/.env` as `VITE_API_BASE_URL=http://localhost:8787`.
 - Server functions forward the incoming request's cookie header to the backend API — required for session auth to work across Workers.
 
+## Web App — Phase 2 Complete
+
+- `apiFetch(path, request)` in `apps/web/src/lib/api.ts` — always forwards the incoming request's cookie header to the backend. Without this, all authenticated backend calls return 401.
+- Better Auth `trustedOrigins: ["http://localhost:3000"]` is required in `src/auth.ts` for CORS preflight to succeed from the frontend Worker. Without it, `OPTIONS /api/auth/sign-in/social` returns 404 and the sign-in flow breaks silently.
+- `callbackURL` in `authClient.signIn.social()` must be the full frontend URL (`http://localhost:3000/dashboard`) — not a relative path. Better Auth runs on the backend Worker; a relative path resolves to `localhost:8787`, not the frontend.
+- `QueryClient` is currently a module-level singleton in `__root.tsx`. This is acceptable for this phase but causes cross-request cache bleed under SSR. Phase 3 wires per-request isolation via `routerWithQueryClient`.
+- Server functions live in `apps/web/src/server-functions/`. Each uses `createServerFn({ method: 'GET' })` from `@tanstack/react-start` and calls `apiFetch` with the forwarded request.
+- `@tanstack/react-router-with-query@1.130.17` lags behind `@tanstack/react-router@1.170.16` — this is the latest published version. Use `QueryClientProvider` directly until the helper catches up.
+
 ## Known Limitations
 
 - Service grouping is by sender domain. Vendors sharing a domain (all Google services on `google.com`) collide into one subscription record. App-store-billed subscriptions (e.g. Spotify via Google Play) are attributed to the platform domain, not the vendor's own domain — so a service can appear both directly and via a platform. Vendor-based grouping is a future architectural change, not yet implemented.

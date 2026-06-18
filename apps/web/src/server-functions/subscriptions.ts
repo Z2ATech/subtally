@@ -3,7 +3,7 @@ import type { Subscription, SubscriptionDetail } from "@subtally/core";
 import { apiFetch } from "../lib/api";
 
 export const getSubscriptions = createServerFn({ method: "GET" })
-  .inputValidator((filter?: { status?: string; service_id?: string }) => filter)
+  .validator((filter?: { status?: string; service_id?: string }) => filter)
   .handler(async ({ data }) => {
     const params = new URLSearchParams();
     if (data?.status) params.set("status", data.status);
@@ -15,7 +15,7 @@ export const getSubscriptions = createServerFn({ method: "GET" })
   });
 
 export const getSubscription = createServerFn({ method: "GET" })
-  .inputValidator((id: string) => id)
+  .validator((id: string) => id)
   .handler(async ({ data: id }) => {
     const res = await apiFetch(`/api/subscriptions/${id}`);
     if (!res.ok) throw new Error(`getSubscription failed: ${res.status}`);
