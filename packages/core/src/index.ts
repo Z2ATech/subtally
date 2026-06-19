@@ -37,6 +37,7 @@ export type SubscriptionDetail = Subscription & { events: SubscriptionEvent[] };
 export type Stats = {
   active_count: number;
   monthly_spend: number;
+  monthly_spend_currency: string | null;
   upcoming_count: number;
   last_scan_at: string | null;
 };

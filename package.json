@@ -5,7 +5,7 @@
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "concurrently \"wrangler dev\" \"bun run dev:web\" --names api,web --prefix-colors blue,green",
     "dev:web": "bun run --cwd apps/web dev",
     "dev:api": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -16,6 +16,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260511.1",
     "@types/bun": "latest",
+    "concurrently": "^10.0.3",
     "drizzle-kit": "^0.31.10",
     "wrangler": "^4.90.1"
   },

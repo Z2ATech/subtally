@@ -1,7 +1,7 @@
 import type { Env } from "../../index";
 import type { createAuth } from "../auth";
 import type { SQL } from "drizzle-orm";
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import * as schema from "../db/schema";
 import { checkRateLimit } from "../lib/ratelimit";
@@ -164,11 +164,31 @@ export async function handleReadRoutes(
 		const [subscriptionStats] = await db
 			.select({
 				active_count: sql<number>`coalesce(sum(case when ${schema.subscriptions.status} = 'active' then 1 else 0 end), 0)`,
-				monthly_spend: sql<number>`coalesce(sum(case when ${schema.subscriptions.status} = 'active' then coalesce(${schema.subscriptions.price_cents}, 0) else 0 end), 0)`,
 				upcoming_count: sql<number>`coalesce(sum(case when ${schema.subscriptions.status} = 'active' and ${schema.subscriptions.next_billing_date} >= ${nowMs} and ${schema.subscriptions.next_billing_date} <= ${inThirtyDaysMs} then 1 else 0 end), 0)`,
 			})
 			.from(schema.subscriptions)
 			.where(eq(schema.subscriptions.user_id, session.user.id));
+
+		// Spend is only meaningful within one currency. Sum per currency across
+		// active priced subs; only return a total when they all share one.
+		const spendByCurrency = await db
+			.select({
+				currency: schema.subscriptions.currency,
+				total: sql<number>`coalesce(sum(${schema.subscriptions.price_cents}), 0)`,
+			})
+			.from(schema.subscriptions)
+			.where(
+				and(
+					eq(schema.subscriptions.user_id, session.user.id),
+					eq(schema.subscriptions.status, "active"),
+					isNotNull(schema.subscriptions.price_cents),
+				),
+			)
+			.groupBy(schema.subscriptions.currency);
+
+		const onlyCurrency = spendByCurrency.length === 1 ? spendByCurrency[0] : undefined;
+		const monthly_spend = onlyCurrency ? Number(onlyCurrency.total) : 0;
+		const monthly_spend_currency = onlyCurrency ? onlyCurrency.currency : null;
 
 		const [scanStats] = await db
 			.select({
@@ -179,7 +199,8 @@ export async function handleReadRoutes(
 
 		return Response.json({
 			active_count: Number(subscriptionStats?.active_count ?? 0),
-			monthly_spend: Number(subscriptionStats?.monthly_spend ?? 0),
+			monthly_spend,
+			monthly_spend_currency,
 			upcoming_count: Number(subscriptionStats?.upcoming_count ?? 0),
 			last_scan_at: toIso(scanStats?.last_scan_at ?? null),
 		});

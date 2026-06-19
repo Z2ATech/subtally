@@ -30,16 +30,11 @@ function DashboardPage() {
   const router = useRouter();
   const [scanning, setScanning] = useState(false);
 
-  // Stats has no currency field; derive it from the active subscriptions that
-  // make up monthly_spend. Mixed currencies can't share a symbol, so show the
-  // bare amount in that case.
-  const activeCurrencies = [
-    ...new Set(subscriptions.map((s) => s.currency).filter(Boolean)),
-  ] as string[];
-  const monthlySpend =
-    activeCurrencies.length === 1
-      ? formatMoney(stats.monthly_spend, activeCurrencies[0])
-      : (stats.monthly_spend / 100).toFixed(2);
+  // Backend resolves the spend currency (null when active subs span multiple
+  // currencies, in which case monthly_spend is 0). Show a symbol when known.
+  const monthlySpend = stats.monthly_spend_currency
+    ? formatMoney(stats.monthly_spend, stats.monthly_spend_currency)
+    : (stats.monthly_spend / 100).toFixed(2);
 
   async function handleSync() {
     setScanning(true);
