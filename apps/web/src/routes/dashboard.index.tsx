@@ -34,7 +34,7 @@ function DashboardPage() {
   // currencies, in which case monthly_spend is 0). Show a symbol when known.
   const monthlySpend = stats.monthly_spend_currency
     ? formatMoney(stats.monthly_spend, stats.monthly_spend_currency)
-    : (stats.monthly_spend / 100).toFixed(2);
+    : "—";
 
   async function handleSync() {
     setScanning(true);
@@ -93,7 +93,7 @@ function DashboardPage() {
                   </div>
                   <div className="text-xs text-gray-500">
                     {s.billing_frequency ?? "—"} · next{" "}
-                    {formatDate(s.next_billing_date)}
+                    {formatNextBillingDate(s.next_billing_date)}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -130,4 +130,14 @@ function DashboardPage() {
       </section>
     </Layout>
   );
+}
+
+function formatNextBillingDate(value: string | null): string {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return Number.isNaN(date.getTime()) || date < today ? "—" : formatDate(value);
 }

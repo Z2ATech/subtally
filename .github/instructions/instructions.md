@@ -186,6 +186,20 @@ Do not create remote resource IDs manually or guess IDs. If remote D1/KV resourc
 - Server functions live in `apps/web/src/server-functions/`. Each uses `createServerFn({ method: 'GET' })` from `@tanstack/react-start` and calls `apiFetch` with the forwarded request.
 - `@tanstack/react-router-with-query@1.130.17` lags behind `@tanstack/react-router@1.170.16` — this is the latest published version. Use `QueryClientProvider` directly until the helper catches up.
 
+## Backend — Subscription Data Quality (in-progress)
+
+### Service Identity
+
+- Services are vendor-first: `canonical_vendor_name` on the `services` table is the primary identity key when a vendor is known. Lookup order: `(owner_user_id, canonical_vendor_name)` → `(owner_user_id, sender_domain)`.
+- App-store-billed subscriptions (e.g. Spotify via Google Play) now correctly unify under one service row keyed on vendor name, not domain.
+- `sender_domain` is kept as metadata (last seen domain for that vendor).
+
+### Subscription Upsert Rules
+
+- NEVER overwrite `price_cents`, `currency`, `next_billing_date`, `billing_frequency`, `vendor_name` with null. Use COALESCE in every upsert — these fields only update when the new value is non-null.
+- Reconciliation pass (end of each scan page) derives `price_cents` + `currency` from the latest non-null `amount_cents` event, same pattern as status derivation.
+- `next_billing_date` is computed from `latest_renewal_occurred_at + billing_period` when LLM returns null (monthly = +30d, yearly = +365d).
+
 ## Known Limitations
 
 - Service grouping is by sender domain. Vendors sharing a domain (all Google services on `google.com`) collide into one subscription record. App-store-billed subscriptions (e.g. Spotify via Google Play) are attributed to the platform domain, not the vendor's own domain — so a service can appear both directly and via a platform. Vendor-based grouping is a future architectural change, not yet implemented.
@@ -218,6 +232,7 @@ Only implement the current assigned task.
 Use minimal Bun-compatible scripts. Add scripts only when needed.
 
 Root scripts:
+
 - `dev:api` — `wrangler dev` (backend)
 - `dev:web` — `bun run --cwd apps/web dev` (frontend)
 

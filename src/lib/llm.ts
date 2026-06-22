@@ -21,10 +21,19 @@ export interface LLMExtraction {
 
 export async function extractSubscriptionData(
   text: string,
+  senderDomain: string | null,
   apiBase: string,
   apiKey: string,
   model: string,
 ): Promise<LLMExtraction | null> {
+  const userMessage = [
+    "Context:",
+    `sender_domain: ${senderDomain ?? "unknown"}`,
+    "",
+    "Email body:",
+    text,
+  ].join("\n");
+
   let response: Response;
   try {
     response = await fetch(`${apiBase}/chat/completions`, {
@@ -37,7 +46,7 @@ export async function extractSubscriptionData(
         model,
         messages: [
           { role: "system", content: SUBSCRIPTION_EXTRACTION_PROMPT },
-          { role: "user", content: text },
+          { role: "user", content: userMessage },
         ],
         temperature: 0,
       }),
@@ -54,8 +63,14 @@ export async function extractSubscriptionData(
     };
     const content = data.choices[0]?.message?.content;
     if (!content) return null;
-    return JSON.parse(content) as LLMExtraction;
+    return JSON.parse(stripJsonFence(content)) as LLMExtraction;
   } catch {
     return null;
   }
+}
+
+function stripJsonFence(content: string): string {
+  const trimmed = content.trim();
+  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match ? match[1].trim() : trimmed;
 }

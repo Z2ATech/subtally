@@ -12,6 +12,8 @@ export interface Env {
   OPENAI_API_BASE: string;
   OPENAI_API_SECRET: string;
   OPENAI_MODEL: string;
+  GEMINI_API_KEY?: string;
+  GEMINI_MODEL: string;
   GMAIL_READONLY_SCOPE: string;
 }
 
