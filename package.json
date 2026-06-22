@@ -14,17 +14,17 @@
     "db:migrate:local": "wrangler d1 migrations apply subtally_db --local"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260511.1",
+    "@cloudflare/workers-types": "^4.20260621.1",
     "@types/bun": "latest",
     "concurrently": "^10.0.3",
     "drizzle-kit": "^0.31.10",
-    "wrangler": "^4.90.1"
+    "wrangler": "^4.103.0"
   },
   "peerDependencies": {
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "better-auth": "^1.6.11",
+    "better-auth": "^1.6.20",
     "drizzle-orm": "^0.45.2"
   }
 }

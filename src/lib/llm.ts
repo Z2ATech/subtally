@@ -72,5 +72,5 @@ export async function extractSubscriptionData(
 function stripJsonFence(content: string): string {
   const trimmed = content.trim();
   const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match ? match[1].trim() : trimmed;
+  return match?.[1] ? match[1].trim() : trimmed;
 }
