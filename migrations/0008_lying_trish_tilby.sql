@@ -1,0 +1,2 @@
+ALTER TABLE `services` ADD `canonical_vendor_name` text;--> statement-breakpoint
+CREATE UNIQUE INDEX `uniq_services_owner_vendor` ON `services` (`owner_user_id`,`canonical_vendor_name`) WHERE "services"."canonical_vendor_name" is not null;

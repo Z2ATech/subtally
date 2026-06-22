@@ -50,6 +50,20 @@
       "when": 1781088134320,
       "tag": "0006_crazy_mongoose",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1781889430295,
+      "tag": "0007_blue_absorbing_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1781891800522,
+      "tag": "0008_lying_trish_tilby",
+      "breakpoints": true
     }
   ]
 }

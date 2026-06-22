@@ -124,6 +124,106 @@ export async function getMessage(
 }
 
 /**
+ * Thrown when Gmail's history is too old to serve a delta (404/410).
+ * Callers should fall back to a full scan.
+ */
+export class HistoryExpiredError extends Error {
+	constructor(message = "Gmail history ID expired") {
+		super(message);
+		this.name = "HistoryExpiredError";
+	}
+}
+
+interface HistoryListResponse {
+	history?: Array<{
+		messagesAdded?: Array<{ message?: { id?: string } }>;
+	}>;
+	nextPageToken?: string;
+	historyId?: string;
+}
+
+/**
+ * Get the mailbox profile, including the current historyId (the cursor for
+ * incremental syncs).
+ */
+export async function getProfile(
+	accessToken: string,
+	apiBase: string
+): Promise<{ historyId: string }> {
+	const response = await retryFetch(
+		`${apiBase}/users/me/profile`,
+		{
+			method: "GET",
+			headers: { Authorization: `Bearer ${accessToken}` },
+		}
+	);
+
+	if (!response.ok) {
+		throw new Error(`Gmail profile failed: ${response.status} ${response.statusText}`);
+	}
+
+	const data = (await response.json()) as { historyId: string };
+	return { historyId: data.historyId };
+}
+
+/**
+ * Fetch added message IDs since startHistoryId via the Gmail History API.
+ * Paginates internally until exhausted and deduplicates IDs (the same message
+ * can appear across multiple history records). Throws HistoryExpiredError on
+ * 404/410 so the caller can fall back to a full scan.
+ */
+export async function getHistory(
+	accessToken: string,
+	startHistoryId: string,
+	apiBase: string,
+	pageToken?: string
+): Promise<{ messageIds: string[]; nextHistoryId: string; nextPageToken?: string }> {
+	const ids = new Set<string>();
+	let token = pageToken;
+	let latestHistoryId = startHistoryId;
+
+	do {
+		const params = new URLSearchParams({
+			startHistoryId,
+			historyTypes: "messageAdded",
+			maxResults: "500",
+			...(token && { pageToken: token }),
+		});
+
+		const response = await retryFetch(
+			`${apiBase}/users/me/history?${params}`,
+			{
+				method: "GET",
+				headers: { Authorization: `Bearer ${accessToken}` },
+			}
+		);
+
+		if (response.status === 404 || response.status === 410) {
+			throw new HistoryExpiredError(
+				`Gmail history expired: ${response.status} ${response.statusText}`
+			);
+		}
+
+		if (!response.ok) {
+			throw new Error(`Gmail history failed: ${response.status} ${response.statusText}`);
+		}
+
+		const data = (await response.json()) as HistoryListResponse;
+		if (data.historyId) latestHistoryId = data.historyId;
+
+		for (const record of data.history ?? []) {
+			for (const added of record.messagesAdded ?? []) {
+				if (added.message?.id) ids.add(added.message.id);
+			}
+		}
+
+		token = data.nextPageToken;
+	} while (token);
+
+	return { messageIds: [...ids], nextHistoryId: latestHistoryId };
+}
+
+/**
  * Get the refresh token for the current user from the database
  */
 export async function getRefreshTokenForUser(

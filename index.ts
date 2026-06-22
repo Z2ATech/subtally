@@ -6,11 +6,14 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
+  WEB_APP_URL: string;
   GMAIL_TOKEN_URL: string;
   GMAIL_API_BASE: string;
   OPENAI_API_BASE: string;
   OPENAI_API_SECRET: string;
   OPENAI_MODEL: string;
+  GEMINI_API_KEY?: string;
+  GEMINI_MODEL: string;
   GMAIL_READONLY_SCOPE: string;
 }
 
@@ -28,8 +31,38 @@ export default {
     if (url.pathname === "/health")
       return new Response("server is healthy", { status: 200 });
 
-    if (url.pathname.startsWith("/api/auth/"))
-      return auth.handler(request);
+    if (url.pathname.startsWith("/api/auth/")) {
+      // Browser auth client (apps/web) calls these cross-origin, so CORS is
+      // required. Better Auth emits no CORS headers and 404s OPTIONS itself.
+      const origin = request.headers.get("Origin");
+      const allowed = origin && origin === env.WEB_APP_URL ? origin : null;
+
+      if (request.method === "OPTIONS") {
+        const headers: Record<string, string> = {
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          "Access-Control-Max-Age": "86400",
+          Vary: "Origin",
+        };
+        if (allowed) {
+          headers["Access-Control-Allow-Origin"] = allowed;
+          headers["Access-Control-Allow-Credentials"] = "true";
+        }
+        return new Response(null, { status: 204, headers });
+      }
+
+      const res = await auth.handler(request);
+      if (!allowed) return res;
+      const headers = new Headers(res.headers);
+      headers.set("Access-Control-Allow-Origin", allowed);
+      headers.set("Access-Control-Allow-Credentials", "true");
+      headers.append("Vary", "Origin");
+      return new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers,
+      });
+    }
 
     if (url.pathname === "/api/gmail/scan" && request.method === "GET")
       return handleGmailScan(request, env, auth);

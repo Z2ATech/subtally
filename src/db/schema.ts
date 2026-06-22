@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, isNotNull } from "drizzle-orm";
 import { sqliteTable, text, integer, index, uniqueIndex, check } from "drizzle-orm/sqlite-core";
 import { user } from "./auth-schema";
 
@@ -10,6 +10,7 @@ export const services = sqliteTable(
     description: text("description"),
     owner_user_id: text("owner_user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
     sender_domain: text("sender_domain"),
+    canonical_vendor_name: text("canonical_vendor_name"),
     email_count: integer("email_count").notNull().default(0),
     last_email_at: integer("last_email_at", { mode: "timestamp_ms" }),
     created_at: integer("created_at", { mode: "timestamp_ms" }).default(sql`(unixepoch() * 1000)`).$defaultFn(() => new Date()),
@@ -19,6 +20,9 @@ export const services = sqliteTable(
     index("idx_services_owner").on(t.owner_user_id),
     uniqueIndex("uniq_services_owner_name").on(t.owner_user_id, t.name),
     uniqueIndex("uniq_services_owner_domain").on(t.owner_user_id, t.sender_domain),
+    uniqueIndex("uniq_services_owner_vendor")
+      .on(t.owner_user_id, t.canonical_vendor_name)
+      .where(isNotNull(t.canonical_vendor_name)),
   ]
 );
 
@@ -64,6 +68,14 @@ export const processed_emails = sqliteTable(
     uniqueIndex("uniq_processed_emails_user_checksum").on(t.user_id, t.checksum),
   ]
 );
+
+export const user_scan_state = sqliteTable("user_scan_state", {
+  user_id: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  last_history_id: text("last_history_id"),
+  last_scanned_at: integer("last_scanned_at", { mode: "timestamp_ms" }),
+});
 
 export const subscription_events = sqliteTable(
   "subscription_events",
